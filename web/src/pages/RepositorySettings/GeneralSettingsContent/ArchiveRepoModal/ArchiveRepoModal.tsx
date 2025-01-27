@@ -15,16 +15,7 @@
  */
 
 import React from 'react'
-import {
-  Container,
-  Button,
-  ButtonVariation,
-  Dialog,
-  Layout,
-  Text,
-  useToaster,
-  StringSubstitute
-} from '@nxenvio/uicore'
+import { Container, Button, ButtonVariation, Dialog, Layout, Text, useToaster, StringSubstitute } from '@nxenvio/uicore'
 import { Color, FontVariation } from '@nxenvio/design-system'
 import { useUpdateRepository } from 'services/code'
 import { useModalHook } from 'hooks/useModalHook'

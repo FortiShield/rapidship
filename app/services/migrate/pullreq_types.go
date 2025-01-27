@@ -14,7 +14,7 @@
 
 package migrate
 
-import migratetypes "github.com/nxenv/nxenv-migrate/types"
+import migratetypes "github.com/nxenv/rapidship/nxenv-migrate/types"
 
 type ExternalPullRequest = migratetypes.PullRequestData
 type ExternalComment = migratetypes.Comment

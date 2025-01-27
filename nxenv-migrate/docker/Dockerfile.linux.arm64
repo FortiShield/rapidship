@@ -1,0 +1,7 @@
+FROM alpine:3.6 as alpine
+
+# Copy the nxenv-migrate binary into the container
+ADD release/linux/arm64/nxenv-migrate /bin/nxenv-migrate
+
+# Set the command to run when the container starts
+ENTRYPOINT ["/bin/nxenv-migrate"]

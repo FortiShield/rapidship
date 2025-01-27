@@ -1,0 +1,286 @@
+// Variables
+variable "enable_triggers" {
+  type        = bool
+  description = "[Optional] (Boolean) Determines if the triggers should be enabled or disabled"
+  default     = true
+}
+
+// Locals
+locals {
+  projects = {
+    hello-world = {
+      yaml_properties = <<-EOT
+        properties:
+          ci:
+            codebase:
+              build: <+input>
+              repoName: hello-world
+          EOT
+      yaml_stages = <<-EOT
+        stages:
+          - stage:
+              identifier: default
+              name: default
+              spec:
+                cloneCodebase: true
+                execution:
+                  steps:
+                  - step:
+                      identifier: hello
+                      name: hello
+                      spec:
+                        command: echo hello world
+                        connectorRef: exampleDockerConn
+                        image: busybox
+                      timeout: ""
+                      type: Run
+                platform:
+                  arch: Amd64
+                  os: Linux
+                runtime:
+                  spec: {}
+                  type: Cloud
+              type: CI
+              when:
+                condition: <+trigger.targetBranch> == "main"
+                pipelineStatus: Success
+          EOT
+      branch    = "main"
+      namespace = "octocat"
+      repo      = "hello-world"
+      secrets   = {
+        PROJECT_SECRET = {
+          value = "dG9wc2VjcmV0"
+        }
+        BAD-SECRET = {
+          value = "cHJpdmF0ZQ=="
+        }
+      }
+    }
+  }
+  secrets = {
+    ORG_SECRET = {
+      value = "Y29uZmlkZW50aWFs"
+    }
+    BAD-SECRET = {
+      value = "Y2xhc3NpZmllZA=="
+    }
+  }
+}
+
+terraform {
+  required_providers {
+    nxenv = {
+      source  = "nxenv/nxenv"
+      version = "= 0.19.1"
+    }
+  }
+}
+
+provider "nxenv" {
+  endpoint = "https://app.nxenv.io/gateway"
+  account_id = "DNVIhrzCr9SnPHMQUEvRspB"
+}
+
+// Organization
+module "organization" {
+  source  = "nxenv-community/structure/nxenv//modules/organizations"
+  version = "~> 0.1"
+
+  name = "exampleOrg"
+}
+// Organization secrets
+resource "nxenv_platform_secret_text" "organization" {
+  for_each = local.secrets
+
+  identifier                = replace(each.key, "-", "_")
+  name                      = each.key
+  org_id                    = module.organization.details.id
+  secret_manager_identifier = "nxenvSecretManager"
+  value                     = base64decode(each.value.value)
+  value_type                = "Inline"
+}
+
+// Projects
+module "projects" {
+  for_each = local.projects
+
+  source  = "nxenv-community/structure/nxenv//modules/projects"
+  version = "~> 0.1"
+
+  name            = each.key
+  organization_id = module.organization.details.id
+}
+
+// Pipelines
+module "pipelines" {
+  for_each = local.projects
+  
+  source  = "nxenv-community/content/nxenv//modules/pipelines"
+  version = "~> 0.1"
+
+  name            = each.key
+  organization_id = module.organization.details.id
+  project_id      = module.projects[each.key].details.id
+  yaml_data       = <<-EOT
+${each.value.yaml_properties}
+${each.value.yaml_stages}
+EOT
+}
+
+// Project secrets
+resource "nxenv_platform_secret_text" "helloworld" {
+  for_each = local.projects["hello-world"].secrets
+
+  identifier                = replace(each.key, "-", "_")
+  name                      = each.key
+  org_id                    = module.organization.details.id
+  project_id                = module.projects["hello-world"].details.id
+  secret_manager_identifier = "nxenvSecretManager"
+  value                     = base64decode(each.value.value)
+  value_type                = "Inline"
+}
+
+// When creating a new Project, there is a potential race-condition
+// as the project comes up.  This resource will introduce
+// a slight delay in further execution to wait for the resources to
+// complete.
+resource "time_sleep" "helloworld_secret_setup" {
+  depends_on = [
+    nxenv_platform_secret_text.helloworld
+  ]
+
+  create_duration  = "15s"
+  destroy_duration = "15s"
+}
+// Pull request trigger
+module "trigger_pr" {
+  for_each = local.projects
+  
+  source  = "nxenv-community/content/nxenv//modules/triggers"
+  version = "~> 0.1"
+
+  name = "Pull Request"
+  organization_id = module.organization.details.id
+  project_id      = module.projects[each.key].details.id
+  pipeline_id     = module.pipelines[each.key].details.id
+  trigger_enabled = var.enable_triggers
+  yaml_data       = <<-EOT
+source:
+  type: Webhook
+  spec:
+    # TODO: support other SCM types
+    type: Github
+    spec:
+      type: PullRequest
+      spec:
+        connectorRef: 
+        autoAbortPreviousExecutions: false
+        payloadConditions:
+          - key: targetBranch
+            operator: Equals
+            value: ${each.value.branch}
+        headerConditions: []
+        repoName: ${each.value.namespace}/${each.value.repo}
+        actions:
+          - Open
+          - Reopen
+          - Synchronize
+inputYaml: |
+  pipeline:
+    identifier: ${module.pipelines[each.key].details.id}
+    properties:
+      ci:
+        codebase:
+          build:
+            type: PR
+            spec:
+              number: <+trigger.prNumber>
+  EOT
+}
+
+// Push trigger
+module "trigger_push" {
+  for_each = local.projects
+  
+  source  = "nxenv-community/content/nxenv//modules/triggers"
+  version = "~> 0.1"
+
+  name = "Push"
+  organization_id = module.organization.details.id
+  project_id      = module.projects[each.key].details.id
+  pipeline_id     = module.pipelines[each.key].details.id
+  trigger_enabled = var.enable_triggers
+  yaml_data       = <<-EOT
+source:
+  type: Webhook
+  spec:
+    # TODO: support other SCM types
+    type: Github
+    spec:
+      type: Push
+      spec:
+        connectorRef: 
+        autoAbortPreviousExecutions: false
+        payloadConditions:
+          - key: targetBranch
+            operator: Equals
+            value: ${each.value.branch}
+        headerConditions: []
+        repoName: ${each.value.namespace}/${each.value.repo}
+        actions: []
+inputYaml: |
+  pipeline:
+    identifier: ${module.pipelines[each.key].details.id}
+    properties:
+      ci:
+        codebase:
+          build:
+            type: branch
+            spec:
+              branch: <+trigger.branch>
+  EOT  
+}
+
+// Tag trigger
+module "trigger_tag" {
+  for_each = local.projects
+  
+  source  = "nxenv-community/content/nxenv//modules/triggers"
+  version = "~> 0.1"
+
+  name = "Tag"
+  organization_id = module.organization.details.id
+  project_id      = module.projects[each.key].details.id
+  pipeline_id     = module.pipelines[each.key].details.id
+  trigger_enabled = var.enable_triggers
+  yaml_data       = <<-EOT
+source:
+  type: Webhook
+  spec:
+    # TODO: support other SCM types
+    type: Github
+    spec:
+      type: Push
+      spec:
+        connectorRef: 
+        autoAbortPreviousExecutions: false
+        payloadConditions:
+          - key: <+trigger.payload.ref>
+            operator: StartsWith
+            value: refs/tags/
+        headerConditions: []
+        repoName: ${each.value.namespace}/${each.value.repo}
+        actions: []
+inputYaml: |
+  pipeline:
+    identifier: ${module.pipelines[each.key].details.id}
+    properties:
+      ci:
+        codebase:
+          build:
+            type: branch
+            spec:
+              branch: <+trigger.branch>
+  EOT
+}

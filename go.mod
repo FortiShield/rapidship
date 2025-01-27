@@ -43,7 +43,6 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/gotidy/ptr v1.4.0
 	github.com/guregu/null v4.0.0+incompatible
-	github.com/nxenv/nxenv-migrate v0.26.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/inhies/go-bytesize v0.0.0-20220417184213-4913239db9cf
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
@@ -212,4 +211,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/nxenv/nxenv-migrate => github.com/nxenv/nxenv-migrate  v0.26.0
+replace github.com/nxenv/rapidship/registry => ./registry

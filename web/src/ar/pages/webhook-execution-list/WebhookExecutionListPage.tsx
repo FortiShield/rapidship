@@ -17,10 +17,7 @@
 import React, { useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { PageBody } from '@nxenvio/uicore'
-import {
-  ListWebhookExecutionsQueryQueryParams,
-  useListWebhookExecutionsQuery
-} from '@nxenvio/react-har-service-client'
+import { ListWebhookExecutionsQueryQueryParams, useListWebhookExecutionsQuery } from '@nxenvio/react-har-service-client'
 
 import { useStrings } from '@ar/frameworks/strings'
 import { useGetSpaceRef, useParentHooks } from '@ar/hooks'

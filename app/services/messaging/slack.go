@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	SlackBotToken = "HARNESS_INTELLIGENCE_SLACK_BOT_TOKEN"
+	SlackBotToken = "NXENV_INTELLIGENCE_SLACK_BOT_TOKEN"
 )
 
 type Slack struct {

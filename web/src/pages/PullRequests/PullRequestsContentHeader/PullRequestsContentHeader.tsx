@@ -16,16 +16,7 @@
 
 import { useHistory } from 'react-router-dom'
 import React, { useEffect, useMemo, useState } from 'react'
-import {
-  Container,
-  Layout,
-  FlexExpander,
-  DropDown,
-  ButtonVariation,
-  Button,
-  SelectOption,
-  Text
-} from '@nxenvio/uicore'
+import { Container, Layout, FlexExpander, DropDown, ButtonVariation, Button, SelectOption, Text } from '@nxenvio/uicore'
 import { Color, FontVariation } from '@nxenvio/design-system'
 import { sortBy } from 'lodash-es'
 import { getConfig, getUsingFetch } from 'services/config'

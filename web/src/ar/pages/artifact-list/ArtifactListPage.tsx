@@ -26,10 +26,7 @@ import {
   ExpandingSearchInput,
   ExpandingSearchInputHandle
 } from '@nxenvio/uicore'
-import {
-  GetAllNxenvArtifactsQueryQueryParams,
-  useGetAllNxenvArtifactsQuery
-} from '@nxenvio/react-har-service-client'
+import { GetAllNxenvArtifactsQueryQueryParams, useGetAllNxenvArtifactsQuery } from '@nxenvio/react-har-service-client'
 
 import { useStrings } from '@ar/frameworks/strings'
 import { DEFAULT_PAGE_INDEX, PreferenceScope } from '@ar/constants'

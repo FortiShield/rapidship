@@ -1,0 +1,105 @@
+kind: pipeline
+type: docker
+name: default
+
+steps:
+  - name: test
+    image: golang:1.21
+    commands:
+      - go test -coverprofile=cover.out ./...
+      - go tool cover -func=cover.out
+
+  - name: build
+    image: golang:1.21
+    environment:
+      CGO_ENABLED: 0
+    commands:
+      - GOOS=linux   GOARCH=amd64   go build -ldflags "-extldflags=-static -X github.com/nxenv/rapidship/nxenv-migrate/cmd.version=${DRONE_TAG##v}" -o release/linux/amd64/nxenv-migrate
+      - GOOS=linux   GOARCH=arm64   go build -ldflags "-extldflags=-static -X github.com/nxenv/rapidship/nxenv-migrate/cmd.version=${DRONE_TAG##v}" -o release/linux/arm64/nxenv-migrate
+      - GOOS=darwin  GOARCH=amd64   go build -ldflags "-extldflags=-static -X github.com/nxenv/rapidship/nxenv-migrate/cmd.version=${DRONE_TAG##v}" -o release/darwin/amd64/nxenv-migrate
+      - GOOS=darwin  GOARCH=arm64   go build -ldflags "-extldflags=-static -X github.com/nxenv/rapidship/nxenv-migrate/cmd.version=${DRONE_TAG##v}" -o release/darwin/arm64/nxenv-migrate
+      - GOOS=windows GOARCH=amd64   go build -ldflags "-extldflags=-static -X github.com/nxenv/rapidship/nxenv-migrate/cmd.version=${DRONE_TAG##v}" -o release/windows/amd64/nxenv-migrate.exe
+      - GOOS=windows GOARCH=arm64   go build -ldflags "-extldflags=-static -X github.com/nxenv/rapidship/nxenv-migrate/cmd.version=${DRONE_TAG##v}" -o release/windows/arm64/nxenv-migrate.exe
+
+      - tar -cvzf release/nxenv-migrate-linux-amd64.tar.gz   -C release/linux/amd64   nxenv-migrate
+      - tar -cvzf release/nxenv-migrate-linux-arm64.tar.gz   -C release/linux/arm64   nxenv-migrate
+      - tar -cvzf release/nxenv-migrate-darwin-amd64.tar.gz  -C release/darwin/amd64  nxenv-migrate
+      - tar -cvzf release/nxenv-migrate-darwin-arm64.tar.gz  -C release/darwin/arm64  nxenv-migrate
+      - tar -cvzf release/nxenv-migrate-windows-amd64.tar.gz -C release/windows/amd64 nxenv-migrate.exe
+      - tar -cvzf release/nxenv-migrate-windows-arm64.tar.gz -C release/windows/arm64 nxenv-migrate.exe
+
+      - sha256sum release/*.tar.gz > release/nxenv-migrate-checksums.txt
+#  - name: publish docker-amd64
+#    image: plugins/docker
+#    pull: if-not-exists
+#    settings:
+#      repo: nxenv/nxenv-migrate
+#      auto_tag: true
+#      auto_tag_suffix: linux-amd64
+#      dockerfile: docker/Dockerfile.linux.amd64
+#      username:
+#        from_secret: nxenv-docker-username
+#      password:
+#        from_secret: nxenv-docker-password
+#    when:
+#      ref:
+#        - refs/heads/master
+#        - refs/tags/v*
+
+#  - name: publish docker-arm64
+#    image: plugins/docker
+#    pull: if-not-exists
+#    settings:
+#      repo: nxenv/nxenv-migrate
+#      auto_tag: true
+#      auto_tag_suffix: linux-arm64
+#      dockerfile: docker/Dockerfile.linux.arm64
+#      username:
+#        from_secret: nxenv-docker-username
+#      password:
+#        from_secret: nxenv-docker-password
+#    when:
+#      ref:
+#        - refs/heads/master
+#        - refs/tags/v*
+
+  - name: release
+    image: plugins/github-release
+    settings:
+      files:
+        - release/nxenv-migrate-*.tar.gz
+        - release/nxenv-migrate-checksums.txt
+      api_key:
+        from_secret: github_token
+    when:
+      ref:
+        - refs/tags/v*
+
+trigger:
+  branch:
+    - master
+    - refs/tags/v*
+
+#---
+#kind: pipeline
+#type: docker
+#name: docker manifest
+#
+#steps:
+#  - name: manifest
+#    image: plugins/manifest
+#    settings:
+#      spec: docker/manifest.tmpl
+#      auto_tag: true
+#      ignore_missing: true
+#      password:
+#        from_secret: nxenv-docker-password
+#      username:
+#        from_secret: nxenv-docker-username
+#
+#depends_on:
+#  - default
+#trigger:
+#  ref:
+#    - refs/heads/master
+#    - refs/tags/v*

@@ -23,7 +23,7 @@ import (
 	"github.com/nxenv/rapidship/app/services/protection"
 	"github.com/nxenv/rapidship/app/store"
 
-	migratetypes "github.com/nxenv/nxenv-migrate/types"
+	migratetypes "github.com/nxenv/rapidship/nxenv-migrate/types"
 )
 
 const ExternalRuleTypeBranch = migratetypes.RuleTypeBranch

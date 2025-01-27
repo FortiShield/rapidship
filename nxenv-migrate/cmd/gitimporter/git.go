@@ -1,0 +1,171 @@
+// Copyright 2023 Nxenv, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package gitimporter
+
+import (
+	"context"
+	"strconv"
+	"strings"
+
+	"github.com/nxenv/rapidship/nxenv-migrate/cmd/util"
+	"github.com/nxenv/rapidship/nxenv-migrate/internal/gitimporter"
+
+	"github.com/alecthomas/kingpin/v2"
+	"github.com/google/uuid"
+	"golang.org/x/exp/slog"
+)
+
+type gitImport struct {
+	debug      bool
+	trace      bool
+	noProgress bool
+
+	endpoint     string
+	nxenvToken string
+	nxenvSpace string
+	nxenvRepo  string // single repo import
+
+	skipUsers     bool
+	Gitness       bool
+	fileSizeLimit int64
+
+	filePath string
+
+	// optional flags to skip import repo meta data
+	noPR      bool
+	noWebhook bool
+	noRule    bool
+	noLabel   bool
+}
+
+type UserInvite bool
+
+func (c *gitImport) run(*kingpin.ParseContext) error {
+	// create the logger
+	log := util.CreateLogger(c.debug)
+
+	// attach the logger to the context
+	ctx := context.Background()
+	ctx = slog.NewContext(ctx, log)
+
+	tracer_ := util.CreateTracerWithLevelAndType(c.debug, c.noProgress)
+	defer tracer_.Close()
+
+	c.nxenvRepo = strings.Trim(c.nxenvRepo, "/")
+	importUuid := uuid.New().String()
+	c.endpoint, _ = strings.CutSuffix(c.endpoint, "/")
+	importer := gitimporter.NewImporter(
+		c.endpoint, c.nxenvSpace, c.nxenvRepo, c.nxenvToken, c.filePath,
+		importUuid, c.Gitness, c.trace,
+		gitimporter.Flags{
+			SkipUsers:     c.skipUsers,
+			FileSizeLimit: c.fileSizeLimit,
+			NoPR:          c.noPR,
+			NoWebhook:     c.noWebhook,
+			NoRule:        c.noRule,
+			NoLabel:       c.noLabel,
+		},
+		tracer_)
+
+	tracer_.Log("starting operation with id: %s", importUuid)
+	return importer.Import(ctx)
+}
+
+func registerGitImporter(app *kingpin.CmdClause) {
+	c := new(gitImport)
+
+	cmd := app.Action(c.run)
+
+	cmd.Arg("filePath", "location of the zip file").
+		Required().
+		StringVar(&c.filePath)
+
+	cmd.Flag("endpoint", "url of target Nxenv Code/Gitness host").
+		Default("https://app.nxenv.io/").
+		Envar("target_HOST").
+		StringVar(&c.endpoint)
+
+	cmd.Flag("token", "nxenv api token").
+		Required().
+		Envar("nxenv_TOKEN").
+		StringVar(&c.nxenvToken)
+
+	cmd.Flag("space", "nxenv path where import should take place. Example: account/org/project").
+		Required().
+		Envar("nxenv_SPACE").
+		StringVar(&c.nxenvSpace)
+
+	cmd.Flag("skip-users", "skip unknown user and map to token uuid (Default:true)").
+		Default("false").
+		Envar("nxenv_SKIP_USERS").
+		BoolVar(&c.skipUsers)
+
+	cmd.Flag("repo-path", "optional path of a single repo to import (e.g, Org/repo).").
+		Envar("NXENV_REPO_PATH").
+		StringVar(&c.nxenvRepo)
+
+	cmd.Flag("file-size-limit", "temporarily update git push file size limit for large repositories during migration. Default: 100MB").
+		Default(strconv.FormatInt(int64(1e+8), 10)).
+		Envar("FILE_SIZE_LIMIT").
+		Int64Var(&c.fileSizeLimit)
+
+	cmd.Flag("gitness", "import into a Gitness instance").
+		Default("false").
+		Envar("Gitness").
+		BoolVar(&c.Gitness)
+
+	cmd.Flag("no-pr", "do Not import pull requests and comments").
+		Default("false").
+		BoolVar(&c.noPR)
+
+	// keeping the old flags before making them obsolete
+	cmd.Flag("skip-pr", "skip importing pull requests and comments (alias for --no-pr)").
+		Default("false").
+		BoolVar(&c.noPR)
+
+	cmd.Flag("no-label", "do Not import labels").
+		Default("false").
+		BoolVar(&c.noLabel)
+
+	cmd.Flag("skip-label", "skip importing labels (alias for --no-label)").
+		Default("false").
+		BoolVar(&c.noLabel)
+
+	cmd.Flag("no-webhook", "do Not import webhooks").
+		Default("false").
+		BoolVar(&c.noWebhook)
+
+	cmd.Flag("skip-webhook", "skip importing webhooks (alias for --no-webhook)").
+		Default("false").
+		BoolVar(&c.noWebhook)
+
+	cmd.Flag("no-rule", "do Not import branch protection rules").
+		Default("false").
+		BoolVar(&c.noRule)
+
+	cmd.Flag("skip-rule", "skip importing branch protection rules (alias for --no-rule)").
+		Default("false").
+		BoolVar(&c.noRule)
+
+	cmd.Flag("debug", "enable debug logging").
+		BoolVar(&c.debug)
+
+	cmd.Flag("trace", "enable trace logging").
+		BoolVar(&c.trace)
+
+	cmd.Flag("no-progress", "disable progress bar logger").
+		Default("false").
+		BoolVar(&c.noProgress)
+}

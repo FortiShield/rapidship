@@ -49,7 +49,7 @@ type ExpandedStates = { [key: string]: boolean }
 type ElapsedTimeStatusMap = { [key: string]: { status: 'string'; time: string; started: string } }
 
 enum CheckKindPayload {
-  HARNESS_STAGE = 'nxenv_stage'
+  NXENV_STAGE = 'nxenv_stage'
 }
 export const ChecksMenu: React.FC<ChecksMenuProps> = ({
   repoMetadata,
@@ -118,7 +118,7 @@ export const ChecksMenu: React.FC<ChecksMenuProps> = ({
       const rawPipelineId = rawPipelineName !== '' ? rawPipelineName : `raw-${hash}`
 
       const pipelineId =
-        (item?.payload?.kind as TypesCheckPayloadExtended) === CheckKindPayload.HARNESS_STAGE
+        (item?.payload?.kind as TypesCheckPayloadExtended) === CheckKindPayload.NXENV_STAGE
           ? item?.payload?.data?.pipeline_identifier
           : rawPipelineId
 
@@ -303,7 +303,7 @@ const CheckMenuItem: React.FC<CheckMenuItemProps> = ({
   const name =
     itemData?.identifier &&
     itemData?.identifier.includes('-') &&
-    (itemData.payload?.kind as TypesCheckPayloadExtended) === CheckKindPayload.HARNESS_STAGE
+    (itemData.payload?.kind as TypesCheckPayloadExtended) === CheckKindPayload.NXENV_STAGE
       ? itemData.identifier.split('-')[1]
       : itemData.identifier
   return (

@@ -29,7 +29,7 @@ import (
 	"github.com/nxenv/rapidship/types/check"
 	"github.com/nxenv/rapidship/types/enum"
 
-	migratetypes "github.com/nxenv/nxenv-migrate/types"
+	migratetypes "github.com/nxenv/rapidship/nxenv-migrate/types"
 	"github.com/rs/zerolog/log"
 )
 
