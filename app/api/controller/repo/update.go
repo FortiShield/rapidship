@@ -1,0 +1,145 @@
+// Copyright 2023 Nxenv, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package repo
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	apiauth "github.com/nxenv/rapidship/app/api/auth"
+	"github.com/nxenv/rapidship/app/api/usererror"
+	"github.com/nxenv/rapidship/app/auth"
+	"github.com/nxenv/rapidship/app/paths"
+	"github.com/nxenv/rapidship/audit"
+	"github.com/nxenv/rapidship/types"
+	"github.com/nxenv/rapidship/types/check"
+	"github.com/nxenv/rapidship/types/enum"
+
+	"github.com/rs/zerolog/log"
+	"golang.org/x/exp/slices"
+)
+
+// UpdateInput is used for updating a repo.
+type UpdateInput struct {
+	Description *string         `json:"description"`
+	State       *enum.RepoState `json:"state"`
+}
+
+var allowedRepoStateTransitions = map[enum.RepoState][]enum.RepoState{
+	enum.RepoStateActive:            {enum.RepoStateArchived, enum.RepoStateMigrateDataImport},
+	enum.RepoStateArchived:          {enum.RepoStateActive},
+	enum.RepoStateMigrateDataImport: {enum.RepoStateActive},
+	enum.RepoStateMigrateGitPush:    {enum.RepoStateActive, enum.RepoStateMigrateDataImport},
+}
+
+func (in *UpdateInput) hasChanges(repo *types.Repository) bool {
+	if in.Description != nil && *in.Description != repo.Description {
+		return true
+	}
+	if in.State != nil && *in.State != repo.State {
+		return true
+	}
+
+	return false
+}
+
+// Update updates a repository.
+func (c *Controller) Update(ctx context.Context,
+	session *auth.Session,
+	repoRef string,
+	in *UpdateInput,
+) (*RepositoryOutput, error) {
+	repo, err := GetRepo(ctx, c.repoFinder, repoRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find repo: %w", err)
+	}
+
+	var additionalAllowedRepoStates []enum.RepoState
+
+	if in.State != nil {
+		additionalAllowedRepoStates = []enum.RepoState{
+			enum.RepoStateArchived, enum.RepoStateMigrateDataImport, enum.RepoStateMigrateGitPush}
+	}
+
+	err = apiauth.CheckRepoState(ctx, session, repo, enum.PermissionRepoEdit, additionalAllowedRepoStates...)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = apiauth.CheckRepo(ctx, c.authorizer, session, repo, enum.PermissionRepoEdit); err != nil {
+		return nil, fmt.Errorf("access check failed: %w", err)
+	}
+
+	repoClone := repo.Clone()
+
+	if !in.hasChanges(repo) {
+		return GetRepoOutput(ctx, c.publicAccess, repo)
+	}
+
+	if err = c.sanitizeUpdateInput(in); err != nil {
+		return nil, fmt.Errorf("failed to sanitize input: %w", err)
+	}
+
+	if in.State != nil &&
+		!slices.Contains(allowedRepoStateTransitions[repo.State], *in.State) {
+		return nil, usererror.BadRequestf("Changing the state of a repository from %s to %s is not allowed.",
+			repo.State, *in.State)
+	}
+
+	repo, err = c.repoStore.UpdateOptLock(ctx, repo, func(repo *types.Repository) error {
+		// update values only if provided
+		if in.Description != nil {
+			repo.Description = *in.Description
+		}
+		if in.State != nil {
+			repo.State = *in.State
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update the repo: %w", err)
+	}
+
+	err = c.auditService.Log(ctx,
+		session.Principal,
+		audit.NewResource(audit.ResourceTypeRepositorySettings, repo.Identifier),
+		audit.ActionUpdated,
+		paths.Parent(repo.Path),
+		audit.WithOldObject(repoClone),
+		audit.WithNewObject(repo),
+	)
+	if err != nil {
+		log.Ctx(ctx).Warn().Msgf("failed to insert audit log for update repository operation: %s", err)
+	}
+
+	// backfill repo url
+	repo.GitURL = c.urlProvider.GenerateGITCloneURL(ctx, repo.Path)
+	repo.GitSSHURL = c.urlProvider.GenerateGITCloneSSHURL(ctx, repo.Path)
+
+	return GetRepoOutput(ctx, c.publicAccess, repo)
+}
+
+func (c *Controller) sanitizeUpdateInput(in *UpdateInput) error {
+	if in.Description != nil {
+		*in.Description = strings.TrimSpace(*in.Description)
+		if err := check.Description(*in.Description); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
